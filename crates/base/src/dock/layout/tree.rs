@@ -6,8 +6,12 @@ use super::node::{NodeId, NodeKind, PaneNode, PaneRef, PanelId};
 
 /// Whether the root of this tree is pinned to a split.
 ///
-/// The center of a `DockArea` must serialize as a `StackPanel` even when
-/// empty, which `RootKind::Split` guarantees. A dock's root is unconstrained.
+/// A `RootKind::Split` tree keeps its content under a split root —
+/// `from_layout` and `from_state` wrap any other shape — so the center of a
+/// `DockArea` stays a resizable stack while it holds content. An emptied root
+/// is exempt in every tree: `normalize`'s root-collapse rule resolves it to
+/// an empty tab group, which serializes and restores like any empty dock.
+/// A dock's root is unconstrained.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum RootKind {
     Split,

@@ -27,7 +27,10 @@ impl PaneTree {
     /// 3. A `Split` whose child is a `Split` of the same axis splices that
     ///    child's children into itself.
     /// 4. `active_ix` is clamped.
-    /// 5. The root is preserved according to [`RootKind`].
+    /// 5. A root `Split` that no longer divides anything resolves to a group:
+    ///    one emptied by rule 1 becomes an empty `Tabs`, so every region
+    ///    keeps a root that renders and takes a drop, and one left with a
+    ///    single child keeps its split when the root kind is pinned to one.
     ///
     /// Idempotent: `normalize(normalize(t)) == normalize(t)`.
     pub fn normalize(&mut self) {
@@ -102,7 +105,10 @@ impl PaneTree {
                 axis,
             } => {
                 ok &= children.len() == sizes.len();
-                // The root may legitimately be an empty or single-child split.
+                // The root is the one split exempt from the non-empty rule: a
+                // fresh tree starts as an empty split, and `collapse_root`
+                // replaces an emptied one with an empty tab group rather than
+                // leaving it here.
                 if node.id() != root_id {
                     ok &= children.len() > 1;
                 }
@@ -245,13 +251,26 @@ fn is_empty_container(node: &PaneNode) -> bool {
 /// Rule 5. A `RootKind::Split` tree keeps a split root no matter what, so an
 /// empty center still serializes as a `StackPanel`. A `RootKind::Any` tree
 /// lets rule 2 collapse the root like any other node.
+/// Root collapse: a root that no longer divides anything resolves to a group.
+///
+/// An emptied split — every child dropped by rule 1 — becomes an empty tab
+/// group, so every region, the center included, keeps a root that renders and
+/// takes a drop. A single-child root keeps its split, because a root pinned
+/// to one hangs its resizable arrangement from it.
 fn collapse_root(tree: &mut PaneTree, changed: &mut bool) {
-    if tree.root_kind() == RootKind::Split {
-        return;
-    }
-
     let replacement = match tree.root().kind_ref() {
-        NodeKind::Split { children, .. } if children.len() == 1 => Some(children[0].clone()),
+        NodeKind::Split { children, .. } if children.is_empty() => Some(PaneNode::new(
+            tree.allocate_node_id(),
+            NodeKind::Tabs {
+                panels: Vec::new(),
+                active_ix: 0,
+            },
+        )),
+        NodeKind::Split { children, .. }
+            if children.len() == 1 && tree.root_kind() == RootKind::Any =>
+        {
+            Some(children[0].clone())
+        }
         _ => None,
     };
 
@@ -361,20 +380,6 @@ mod tests {
         assert_eq!(active_ix, 1);
     }
 
-    #[test]
-    fn a_split_root_survives_being_emptied() {
-        let mut tree = PaneTree::new(RootKind::Split);
-        let root = tree.root().id();
-        tree.push_tabs_for_test(root, vec![]);
-
-        tree.normalize();
-
-        assert!(
-            matches!(tree.root().kind(), PaneRef::Split { children, .. } if children.is_empty()),
-            "the center must still serialize as a StackPanel when empty"
-        );
-    }
-
     /// Rule 3 splices a same-axis child's slots into the parent, scaling them
     /// to the slot they replace. When one inner slot is unconstrained there is
     /// no total to scale against, so they pass through — and then the known
@@ -429,6 +434,29 @@ mod tests {
             "the survivors keep their own sizes; the 800px the empty group \
              held is not handed to either of them here"
         );
+    }
+
+    /// A root split with nothing left in it resolves to an empty tab group,
+    /// in every tree: an emptied region — the center's as much as a dock's —
+    /// keeps a root that renders and takes a drop.
+    #[test]
+    fn an_emptied_root_split_resolves_to_an_empty_tab_group() {
+        for kind in [RootKind::Split, RootKind::Any] {
+            let mut tree = PaneTree::new(kind);
+            let root = tree.root().id();
+            // An emptied group is dropped by rule 1, which is what empties
+            // the root in the first place.
+            tree.push_tabs_for_test(root, vec![]);
+            tree.normalize();
+
+            assert!(
+                matches!(
+                    tree.root().kind(),
+                    PaneRef::Tabs { panels, .. } if panels.is_empty()
+                ),
+                "{kind:?}: the emptied root became an empty group"
+            );
+        }
     }
 
     #[test]

@@ -158,8 +158,8 @@ fn zoom_control(group: &TabGroupContext, cx: &App) -> Option<PanelControl> {
 ///
 /// The guard is the skin's. [`TabGroupContext::drag_panel`] answers for any
 /// tab in range whether or not the group may be rearranged, so a tab bar that
-/// forgets to ask [`TabGroupContext::is_draggable`] makes a group that has
-/// nowhere to go — a dock's last group, a locked dock — draggable anyway. The
+/// forgets to ask [`TabGroupContext::is_draggable`] makes a group that must
+/// not be rearranged — a locked dock, a zoomed group — draggable anyway. The
 /// old dock asked the same question, spelled `state.draggable`.
 fn tab_drag(group: &TabGroupContext, ix: usize, cx: &App) -> Option<DragPanel> {
     group
@@ -972,7 +972,7 @@ mod tests {
     /// `on_drag` in `.when(state.draggable, ..)`. Base does not enforce it:
     /// `TabGroupContext::drag_panel` answers for any tab in range.
     #[gpui::test]
-    fn the_last_group_in_a_dock_offers_no_drag(cx: &mut TestAppContext) {
+    fn a_lone_group_still_offers_a_drag(cx: &mut TestAppContext) {
         let (area, log, cx) = recording_area(cx);
 
         cx.update(|window, cx| {
@@ -985,9 +985,9 @@ mod tests {
 
         assert_eq!(
             log.borrow().draggable,
-            vec![false],
-            "the only visible panel in the dock has nowhere to go, so its tab \
-             must not start a drag"
+            vec![true],
+            "a lone group's last panel may leave — the emptied container stays \
+             as a drop target — so its tab starts a drag"
         );
     }
 

@@ -1483,12 +1483,25 @@ impl DockArea {
         let pane = self.docks.get(&placement)?;
         let dock = self.dock_context(placement, &pane.dock);
 
+        // An emptied dock renders nothing while idle: nothing to draw takes
+        // no space, the same rule that hides a split slot whose panels are
+        // all hidden. While a drag is in flight it renders at its own size
+        // again, so the region itself is the drop target a panel can be
+        // parked in — its root group takes the drop through the ordinary
+        // body handler.
+        //
         // A closed dock keeps what the renderer asks for: by default nothing
         // at the sides and a strip at the bottom so its tab bar stays
         // clickable. Nothing is drawn
         // for a dock with no extent, and the renderer is not asked for chrome
         // nobody can see.
-        let size = if dock.is_open() {
+        let size = if self.is_empty(placement, cx) {
+            if cx.has_active_drag() {
+                dock.size()
+            } else {
+                px(0.)
+            }
+        } else if dock.is_open() {
             dock.size()
         } else {
             self.renderer.closed_dock_extent(placement)
@@ -3673,6 +3686,46 @@ mod tests {
         cx.run_until_parked();
 
         assert!(is_center_empty(&area, cx));
+    }
+
+    /// An emptied center resolves to an empty tab group — not a split with
+    /// nothing in it — so it keeps a root that renders and takes a drop, and
+    /// a panel dragged out can be parked straight back.
+    #[gpui::test]
+    fn an_emptied_center_keeps_an_empty_group_that_takes_a_panel(cx: &mut TestAppContext) {
+        let log = log_of();
+        let (area, panels, cx) = one_group(&log, &["A"], None, cx);
+        cx.run_until_parked();
+
+        cx.update(|window, cx| {
+            area.update(cx, |area, cx| {
+                area.remove_panel(panels[0].clone(), window, cx)
+            });
+        });
+        cx.run_until_parked();
+        assert!(is_center_empty(&area, cx));
+        let root_is_empty_group = cx.update(|_, cx| {
+            matches!(
+                area.read(cx).layout(DockPlacement::Center).unwrap().root().kind(),
+                PaneRef::Tabs { panels, .. } if panels.is_empty(),
+            )
+        });
+        assert!(
+            root_is_empty_group,
+            "the emptied center keeps an empty group at its root"
+        );
+
+        cx.update(|window, cx| {
+            let parked = TestPanel::new("Parked", cx);
+            area.update(cx, |area, cx| {
+                area.add_panel(parked, DockPlacement::Center, None, window, cx)
+            });
+        });
+        cx.run_until_parked();
+        assert!(
+            !is_center_empty(&area, cx),
+            "the emptied center's group takes the panel back"
+        );
     }
 
     #[gpui::test]

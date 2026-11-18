@@ -471,13 +471,15 @@ mod tests {
     fn the_legacy_empty_tab_group_is_rewritten_into_the_tabs_form() {
         let state = canonicalize(include_str!("fixtures/legacy_empty_tab_group.json"));
 
-        // The empty group collapses, leaving the mandatory split root.
-        assert_eq!(state.panel_name, "StackPanel");
+        // The emptied root resolves to an empty group, which is the canonical
+        // form for every emptied region: a `TabPanel` with no children.
+        assert_eq!(state.panel_name, "TabPanel");
+        assert_eq!(state.info, PanelInfo::tabs(0));
         assert!(state.children.is_empty());
     }
 
     #[test]
-    fn the_legacy_empty_stack_panel_is_read_as_an_empty_split() {
+    fn the_legacy_empty_stack_panel_is_read_as_an_empty_group() {
         let json = include_str!("fixtures/legacy_empty_stack_panel.json");
         let state: DockAreaState = serde_json::from_str(json).unwrap();
         let mut panels = PreservingPanels::default();
@@ -485,8 +487,9 @@ mod tests {
 
         assert!(panels.states.is_empty(), "no placeholder is built for it");
         let state = tree.to_state(&panels);
-        assert_eq!(state.panel_name, "StackPanel");
-        assert!(matches!(state.info, PanelInfo::Stack { .. }));
+        // An emptied root resolves to an empty group, center or dock alike.
+        assert_eq!(state.panel_name, "TabPanel");
+        assert_eq!(state.info, PanelInfo::tabs(0));
         assert!(state.children.is_empty());
     }
 

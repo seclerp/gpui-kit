@@ -655,4 +655,62 @@ mod tests {
         draw(cx);
         assert_eq!(center.get() - with_strip, CLOSED_BOTTOM_STRIP);
     }
+
+    /// An emptied dock renders nothing while idle — the same zero extent a
+    /// closed dock takes — so the centre reclaims the dock's whole size.
+    /// The while-dragging reopen stays manual: the harness cannot carry an
+    /// element drag.
+    #[gpui::test]
+    fn an_emptied_dock_takes_no_space_while_idle(cx: &mut TestAppContext) {
+        cx.update(|cx| crate::init(cx));
+        let (area, cx) = cx.add_window_view(|window, cx| {
+            DockArea::new("test", None, window, cx).with_renderer(DockSkin::new(cx))
+        });
+        cx.simulate_resize(size(px(800.), px(600.)));
+        let center = Rc::new(std::cell::Cell::new(px(0.)));
+        let bottom_panel = cx.update(|window, cx| {
+            let probe = MeasuredProbe::new(Rc::default(), cx);
+            area.update(cx, |area, cx| {
+                area.set_center(
+                    DockLayout::tabs().panel(MeasuredProbe::new(center.clone(), cx)),
+                    window,
+                    cx,
+                );
+                area.set_dock(
+                    DockPlacement::Bottom,
+                    DockLayout::tabs().panel(probe.clone()),
+                    window,
+                    cx,
+                );
+            });
+            probe
+        });
+        let draw = |cx: &mut VisualTestContext| {
+            cx.run_until_parked();
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+        };
+        draw(cx);
+        let with_dock = center.get();
+        let dock_size = cx
+            .update(|_, cx| area.read(cx).dock_size(DockPlacement::Bottom))
+            .expect("the bottom dock is installed");
+        assert!(dock_size > px(0.), "a populated dock holds its size");
+
+        cx.update(|window, cx| {
+            area.update(cx, |area, cx| {
+                area.remove_panel(bottom_panel.clone(), window, cx)
+            });
+        });
+        draw(cx);
+        assert!(
+            cx.update(|_, cx| area.read(cx).is_empty(DockPlacement::Bottom, cx)),
+            "removing the panel empties the dock"
+        );
+        assert_eq!(
+            center.get() - with_dock,
+            dock_size,
+            "the emptied dock renders nothing while idle, so the centre \
+             reclaims its whole size"
+        );
+    }
 }

@@ -217,12 +217,12 @@ impl TabGroup {
 
     /// Whether closing this group's displayed panel is allowed at all.
     ///
-    /// Mirrors the old `TabPanel::closable`: the container must permit it, the
-    /// group must have somewhere to go, and the displayed panel must itself be
-    /// closable.
+    /// Mirrors the old `TabPanel::closable`: the container must permit it and
+    /// the displayed panel must itself be closable. Closing the last panel
+    /// empties the region, which is as supported as dragging it out.
     pub fn is_closable(&self, cx: &App) -> bool {
         self.constraints.is_closable()
-            && self.draggable(cx)
+            && !self.is_locked()
             && self
                 .active_panel(cx)
                 .is_some_and(|panel| panel.closable(cx))
@@ -243,12 +243,9 @@ impl TabGroup {
 
     /// Ask the container to close `panel`. Nothing happens for a panel that is
     /// not in this group, or when either the group or the panel refuses.
+    /// Closing the last panel empties the region, which is a supported state.
     pub fn close_panel(&mut self, panel: PanelId, cx: &mut Context<Self>) {
-        if !self.constraints.is_closable() {
-            return;
-        }
-        // A dock's last group has nowhere to go and must stay.
-        if !self.draggable(cx) {
+        if !self.constraints.is_closable() || !self.draggable(cx) {
             return;
         }
 
@@ -444,15 +441,12 @@ impl TabGroup {
         self.constraints.is_locked() || self.zoomed
     }
 
-    /// True when this group holds the last visible panel that anything could
-    /// be rearranged around. Only visible panels count, so a hidden panel does
-    /// not keep the last visible one draggable and leave the dock empty.
-    fn is_last_panel(&self, cx: &App) -> bool {
-        self.constraints.is_alone() && self.visible_panels(cx).count() <= 1
-    }
-
-    fn draggable(&self, cx: &App) -> bool {
-        !self.is_locked() && !self.is_last_panel(cx)
+    /// Any panel may leave: an emptied region is a supported state, which
+    /// renders nothing while idle and reopens as a drop target while a drag
+    /// is in flight, so the last visible panel is not pinned here. Only a
+    /// locked group refuses rearranging.
+    fn draggable(&self, _cx: &App) -> bool {
+        !self.is_locked()
     }
 
     fn droppable(&self) -> bool {
@@ -1205,10 +1199,10 @@ mod tests {
         assert!(!cx.update(|_, cx| group.read(cx).context(cx).is_droppable()));
     }
 
-    /// Dragging the last visible panel out of the only group would leave the
-    /// dock empty and undroppable, so it is refused.
+    /// Dragging the last visible panel out of the only group empties the
+    /// region, which is a supported state, so the drag is offered.
     #[gpui::test]
-    fn the_only_groups_last_visible_panel_cannot_be_dragged_out(cx: &mut TestAppContext) {
+    fn the_only_groups_last_visible_panel_can_be_dragged_out(cx: &mut TestAppContext) {
         let log = log_of();
         let (group, _panels, cx) = build_group(&log, &["a"], cx);
 
@@ -1225,7 +1219,7 @@ mod tests {
         });
         let beside_others = cx.update(|_, cx| group.read(cx).context(cx).is_draggable());
 
-        assert!(!alone);
+        assert!(alone);
         assert!(beside_others);
     }
 
@@ -1517,13 +1511,12 @@ mod tests {
         assert!(events.borrow().is_empty());
     }
 
-    /// The last visible panel of the only group has nowhere to go, so it is
-    /// not closable either — closing it would empty the region out from under
-    /// itself. Placing a sibling beside the group makes the same panel
-    /// closable again, which is what pins the reason to `alone` rather than to
-    /// something else the sealed default also forbids.
+    /// Closing the last visible panel of the only group empties the region,
+    /// which is as supported as dragging it out, so the panel stays closable
+    /// with or without a sibling. What still refuses is the sealed default
+    /// the constraints start with.
     #[gpui::test]
-    fn the_only_groups_last_panel_is_not_closable(cx: &mut TestAppContext) {
+    fn the_only_groups_last_panel_is_closable(cx: &mut TestAppContext) {
         let log = log_of();
         let (group, _panels, cx) = build_group(&log, &["a"], cx);
 
@@ -1541,7 +1534,7 @@ mod tests {
         });
         let beside_a_sibling = cx.update(|_, cx| group.read(cx).context(cx).is_closable());
 
-        assert!(!alone);
+        assert!(alone);
         assert!(beside_a_sibling);
     }
 

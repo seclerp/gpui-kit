@@ -410,7 +410,9 @@ mod tests {
         assert!(!tree.contains_panel(panel(1)), "the panel left the tree");
         assert!(tree.find_node(tabs).is_none(), "its empty group collapsed");
         assert!(
-            matches!(tree.root().kind(), PaneRef::Split { children, .. } if children.is_empty())
+            matches!(tree.root().kind(), PaneRef::Tabs { panels, .. } if panels.is_empty()),
+            "the emptied root resolves to an empty group, which renders and \
+             takes a drop"
         );
     }
 
