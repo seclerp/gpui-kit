@@ -269,7 +269,7 @@ impl TabGroupSkin {
         Some(
             Button::new(SharedString::from(format!("toggle-dock:{:?}", placement)))
                 .icon(icon)
-                .xsmall()
+                .large()
                 .ghost()
                 .tab_stop(false)
                 .tooltip(match is_open {
@@ -313,7 +313,7 @@ impl TabGroupSkin {
                 this.children(
                     buttons
                         .into_iter()
-                        .map(|button| button.xsmall().ghost().tab_stop(false)),
+                        .map(|button| button.large().ghost().tab_stop(false)),
                 )
             })
             .when_some(
@@ -326,7 +326,7 @@ impl TabGroupSkin {
                     this.child(
                         Button::new(id)
                             .icon(icon)
-                            .xsmall()
+                            .large()
                             .ghost()
                             .tab_stop(false)
                             .tooltip_with_action(tooltip, &ToggleZoom, None)
@@ -346,7 +346,7 @@ impl TabGroupSkin {
             .child(
                 Button::new("menu")
                     .icon(IconName::Ellipsis)
-                    .xsmall()
+                    .large()
                     .ghost()
                     .tab_stop(false)
                     .dropdown_menu(move |menu, window, cx| {
@@ -533,7 +533,7 @@ impl TabGroupSkin {
                                     this.suffix(
                                         Button::new(("close-tab", ix))
                                             .icon(IconName::Close)
-                                            .xsmall()
+                                            .large()
                                             // The regular ghost hover matches the
                                             // inactive tab bar background in the
                                             // default theme. Use a stronger theme
